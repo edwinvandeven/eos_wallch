@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import dbus
 import os
 import configparser
 import getpass
@@ -64,14 +65,25 @@ def _update_wallpaper(picture_uri):
     gso.set_string("picture-uri", picture_uri)
     
     # Copy to /var/lib/lightdm-data/<username>/wallpaper/
-    
     username = getpass.getuser()
     lightdm_wall_folder = "/var/lib/lightdm-data/%s/wallpaper" % username
     wall_source_path = picture_uri.replace("file://", "")
+    lightdm_dest = os.path.join(lightdm_wall_folder, os.path.basename(wall_source_path))
     
     # Clean up folder before copy
     [f.unlink() for f in Path(lightdm_wall_folder).glob("*") if f.is_file()]    
-    copyfile(wall_source_path, os.path.join(lightdm_wall_folder, os.path.basename(wall_source_path)))
+    copyfile(wall_source_path, lightdm_dest)
+    
+    # Set greeter image
+    system_bus = dbus.SystemBus()
+    uid = os.getuid()
+    obj_path = "/org/freedesktop/Accounts/User%s" % str(uid)
+    print(obj_path)    
+    system_bus = dbus.SystemBus()
+    proxy = system_bus.get_object("org.freedesktop.Accounts", obj_path)
+    properties_manager = dbus.Interface(proxy, 'org.freedesktop.DBus.Properties')
+    properties_manager.Set('org.freedesktop.DisplayManager.AccountsService', 'BackgroundFile', lightdm_dest)
+    
     
 def _keep_wallpaper_in_sync():
     dark_mode_active = _get_dark_mode_active()
@@ -87,7 +99,7 @@ def _keep_wallpaper_in_sync():
         if current_wallpaper != light_wallpaper:
             _update_wallpaper(light_wallpaper)
     
-    sleep(60)
+    sleep(120)
     _keep_wallpaper_in_sync()
 
 def main():    
